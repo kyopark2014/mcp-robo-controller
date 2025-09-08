@@ -163,12 +163,9 @@ return {
 
 ```python
 mcp_json = mcp_config.load_selected_config(mcp_servers)
-
 server_params = langgraph_agent.load_multiple_mcp_server_parameters(mcp_json)
-
 client = MultiServerMCPClient(server_params)
 tools = await client.get_tools()
-
 app = langgraph_agent.buildChatAgent(tools)
 config = {
     "recursion_limit": 50,
@@ -191,16 +188,11 @@ async for output in app.astream(inputs, config, stream_mode="messages"):
 
 ```python
 mcp_manager = MCPClientManager()
-
 mcp_manager.add_streamable_client(name, url, headers)
-
 tools = update_tools(strands_tools, mcp_servers)
-
 agent = create_agent(system_prompt, tools, history_mode)
-
 with strands_agent.mcp_manager.get_active_clients(mcp_servers) as _:
-    agent_stream = strands_agent.agent.stream_async(query)
-    
+    agent_stream = strands_agent.agent.stream_async(query)    
     async for event in agent_stream:
         text = ""            
         if "result" in event:
