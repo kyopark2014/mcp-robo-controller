@@ -32,7 +32,7 @@ Robot 제어를 위한 명령(command)는 action과 message로 주어집니다. 
 
 Robot에서 지정된 topic (robo/feedback)으로 feedback에 대한 메시지를 전송하면 IoT Core를 통해 [Lambda](./feedback-manager/lambda-feedback-manager-for-robo/lambda_function.py)에서 수신합니다. 이 메시지는 SQS (fifo)에 순차적으로 기록되면, 이후 client에서 가져다가 활용합니다. 
 
-### 설치 방법
+### 상세 구현
 
 Robot의 Feedback을 위해서는 IoT Core의 topic을 수신하기 위한 SQS, Rule과 Lambda가 필요합니다. 상세코드는 [create_feedback_manager.py](./feedback-manager/create_feedback_manager.py)을 참조합니다.
 
@@ -163,7 +163,13 @@ while True:
             )
 ```
 
-### 테스트 방법
+### 설치 및 테스트
+
+아래 명령어로 설치합니다.
+
+```text
+python create_feedback_manager.py
+```
 
 [test_feedback.py](./feedback-manager/test_feedback.py)를 이용해 테스트 할 수 있습니다.
 
@@ -171,7 +177,7 @@ while True:
 python test_feedback.py
 ```
 
-이때의 결과는 아래와 같습니다.
+이후 MQTT Tester를 이용해 메시지 전송후 결과를 확인하면 아래와 같습니다.
 
 ```text
 python test_feedback.py
