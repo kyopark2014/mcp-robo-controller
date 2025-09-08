@@ -1,0 +1,15 @@
+{
+  "region": "us-west-2",
+  "projectName": "robo",
+  "accountId": "262976740991",
+  "knowledge_base_name": "robo",
+  "secret_name": "robo/credentials",
+  "cognito": {
+    "user_pool_name": "robo-agentcore-user-pool",
+    "user_pool_id": "us-west-2_dnb8dFHq1",
+    "client_name": "robo-agentcore-client",
+    "client_id": "60a19069ddvtdq10cmj8729udp",
+    "test_username": "robo-test-user@example.com",
+    "test_password": "TestPassword123!"
+  }
+}
