@@ -174,7 +174,8 @@ def clear_chat_history():
     initiate()
     
     global memory_chain
-    memory_chain = []
+    # Clear the chat memory instead of replacing the entire memory_chain object
+    memory_chain.chat_memory.clear()
     map_chain[user_id] = memory_chain
 
 def save_chat_history(text, msg):
