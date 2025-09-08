@@ -28,6 +28,190 @@ Robot 제어를 위한 명령(command)는 action과 message로 주어집니다. 
 }
 ```
 
+### MCP 서버의 동작
+
+[lambda_function.py](./gateway/mcp-interface/lambda_function.py)와 같이 수신된 event로부터 지원하는 tool인지를 toolName으로 확인한 후에 action과 message를 추출하여 활용합니다.
+
+```python
+def lambda_handler(event, context):
+    toolName = context.client_context.custom['bedrockAgentCoreToolName']
+    
+    delimiter = "___"
+    if delimiter in toolName:
+        toolName = toolName[toolName.index(delimiter) + len(delimiter):]
+
+    action = event.get('action')
+    message = event.get('message')
+
+    if toolName == 'command':
+        result = command_robot(action, message)
+        return {
+            'statusCode': 200, 
+            'body': result
+        }
+```
+
+### MCP Gateway의 생성
+
+[create_gateway_tool.py](./gateway/mcp-interface/create_gateway_tool.py)와 같이 MCP Gateway를 생성합니다.
+
+```pyhton
+gateway_id = config.get('gateway_id')    
+gateway_url = f'https://{gateway_id}.gateway.bedrock-agentcore.{region}.amazonaws.com/mcp'
+agentcore_gateway_iam_role = config['agentcore_gateway_iam_role']
+auth_config = {
+    "customJWTAuthorizer": { 
+        "allowedClients": [client_id],  
+        "discoveryUrl": cognito_discovery_url
+    }
+}
+response = gateway_client.create_gateway(
+    name=gateway_name,
+    roleArn = agentcore_gateway_iam_role,
+    protocolType='MCP',
+    authorizerType='CUSTOM_JWT',
+    authorizerConfiguration=auth_config, 
+    description=f'AgentCore Gateway for {projectName}'
+)
+```
+
+이제 아래와 같이 target을 gateway에 deploy합니다.
+
+```python
+TOOL_SPEC = json.load(open(os.path.join(script_dir, "tool_spec.json")))
+lambda_target_config = {
+    "mcp": {
+        "lambda": {
+            "lambdaArn": lambda_function_arn, 
+            "toolSchema": {
+                "inlinePayload": [TOOL_SPEC]
+            }
+        }
+    }
+}
+credential_config = [ 
+    {
+        "credentialProviderType" : "GATEWAY_IAM_ROLE"
+    }
+]
+response = gateway_client.create_gateway_target(
+    gatewayIdentifier=gateway_id,
+    name=targetname,
+    description=f'{targetname} for {projectName}',
+    targetConfiguration=lambda_target_config,
+    credentialProviderConfigurations=credential_config)
+
+target_id = response["targetId"]
+```
+
+
+### MCP 서버 설치
+
+[create_gateway_role.py](./gateway/mcp-interface/create_gateway_role.py)을 이용해 필요한 Role을 생성합니다.
+
+```text
+python create_gateway_role.py
+```
+[create_gateway_tool.py](./gateway/mcp-interface/create_gateway_tool.py)을 이용해 gateway와 target을 설치합니다. 이때 target의 실행을 위해 lambda도 설치합니다.
+
+```text
+python create_gateway_tool.py
+```
+
+### MCP 서버의 활용
+
+[test_mcp_remote.py](./gateway/mcp-interface/test_mcp_remote.py)와 같이 활용합니다.
+
+```python
+from mcp.client.streamable_http import streamablehttp_client
+
+async with streamablehttp_client(mcp_url, headers, timeout=120, terminate_on_close=False) as (
+    read_stream, write_stream, _):
+
+    async with ClientSession(read_stream, write_stream) as session:
+        tool_result = await asyncio.wait_for(session.list_tools(), timeout=60)
+        for tool in tool_result.tools:
+            print(f"  - {tool.name}: {tool.description[:100]}...")
+
+        targret_name = config['target_name']
+        tool_name = f"{targret_name}___command"
+        result = await asyncio.wait_for(session.call_tool(tool_name, params), timeout=30)
+```
+
+생성된 MCP의 정보는 아래와 같이 가져옵니다.
+
+```python
+gateway_url = f'https://{gateway_id}.gateway.bedrock-agentcore.{region}.amazonaws.com/mcp'
+bearer_token = retrieve_bearer_token(config['secret_name'])
+
+return {
+    "mcpServers": {
+        "agentcore-gateway": {
+            "type": "streamable_http",
+            "url": gateway_url,
+            "headers": {
+                "Authorization": f"Bearer {bearer_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream"
+            }
+        }
+    }
+}
+```
+
+이를 LangGraph에서 활용할 때에는 아래와 같이 수행합니다.
+
+```python
+mcp_json = mcp_config.load_selected_config(mcp_servers)
+
+server_params = langgraph_agent.load_multiple_mcp_server_parameters(mcp_json)
+
+client = MultiServerMCPClient(server_params)
+tools = await client.get_tools()
+
+app = langgraph_agent.buildChatAgent(tools)
+config = {
+    "recursion_limit": 50,
+    "configurable": {"thread_id": user_id},
+    "tools": tools,
+    "system_prompt": None
+}   
+inputs = {
+    "messages": [HumanMessage(content=query)]
+}
+async for output in app.astream(inputs, config, stream_mode="messages"):
+    message = output[0]    
+    for content_item in message.content:
+        if content_item.get('type') == 'text':
+            text_content = content_item.get('text', '')
+            result += text_content
+```
+
+또한 이를 Strands에서 활용할 때에는 아래와 같이 수행합니다.
+
+```python
+mcp_manager = MCPClientManager()
+
+mcp_manager.add_streamable_client(name, url, headers)
+
+tools = update_tools(strands_tools, mcp_servers)
+
+agent = create_agent(system_prompt, tools, history_mode)
+
+with strands_agent.mcp_manager.get_active_clients(mcp_servers) as _:
+    agent_stream = strands_agent.agent.stream_async(query)
+    
+    async for event in agent_stream:
+        text = ""            
+        if "result" in event:
+            final = event["result"]                
+            message = final.message
+            if message:
+                content = message.get("content", [])
+                result = content[0].get("text", "")
+                final_result = result
+```
+
 ## Robot의 Feedback
 
 Robot에서 지정된 topic (robo/feedback)으로 feedback에 대한 메시지를 전송하면 IoT Core를 통해 [Lambda](./feedback-manager/lambda-feedback-manager-for-robo/lambda_function.py)에서 수신합니다. 이 메시지는 SQS (fifo)에 순차적으로 기록되면, 이후 client에서 가져다가 활용합니다. 
