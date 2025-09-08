@@ -1,4 +1,4 @@
-# MCP Robot Controller
+# MCP Robo Controller
 
 ## Robot AgentCore Gateway
 
