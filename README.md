@@ -30,7 +30,7 @@ Robot 제어를 위한 명령(command)는 action과 message로 주어집니다. 
 
 ### MCP 서버의 동작
 
-[lambda_function.py](./gateway/mcp-interface/lambda_function.py)와 같이 수신된 event로부터 지원하는 tool인지를 toolName으로 확인한 후에 action과 message를 추출하여 활용합니다.
+[lambda_function.py](./gateway/mcp-interface/lambda-mcp-interface-for-robo/lambda_function.py)와 같이 수신된 event로부터 지원하는 tool인지를 toolName으로 확인한 후에 action과 message를 추출하여 활용합니다.
 
 ```python
 def lambda_handler(event, context):
