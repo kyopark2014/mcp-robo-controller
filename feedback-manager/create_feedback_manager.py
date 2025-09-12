@@ -9,8 +9,23 @@ config_path = os.path.join(script_dir, "config.json")
 
 def load_config():
     config = None    
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)    
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)    
+    except Exception as e:
+        print(f"Error loading config: {e}")
+        config = {}
+
+        session = boto3.Session()
+        region = session.region_name
+        config['region'] = region
+        config['projectName'] = "robo"
+
+        sts_client = boto3.client('sts')
+        accountId = sts_client.get_caller_identity()['Account']
+        config['accountId'] = accountId
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
     return config
 config = load_config()
 
@@ -150,6 +165,23 @@ def create_lambda_function_policy(lambda_function_name):
                     "iot:*"
                 ],
                 "Resource": "*"
+            },
+            {
+                "Sid": "IoTRuleAccess",
+                "Effect": "Allow",
+                "Action": [
+                    "iot:CreateTopicRule",
+                    "iot:ReplaceTopicRule",
+                    "iot:GetTopicRule",
+                    "iot:DeleteTopicRule",
+                    "iot:ListTopicRules",
+                    "iot:EnableTopicRule",
+                    "iot:DisableTopicRule"
+                ],
+                "Resource": [
+                    f"arn:aws:iot:{region}:{accountId}:rule/robo_feedback_rule",
+                    f"arn:aws:iot:{region}:{accountId}:rule/*"
+                ]
             },
             {
                 "Sid": "SQSAccess",
@@ -419,7 +451,7 @@ def update_lambda_function_arn():
         try:
             # Set environment variables
             environment_variables = {}
-            environment_variables['KNOWLEDGE_BASE_ID'] = config.get('knowledge_base_id', "")
+            # environment_variables['KNOWLEDGE_BASE_ID'] = config.get('knowledge_base_id', "")
             
             lambda_client.update_function_configuration(
                 FunctionName=lambda_function_name,
@@ -490,14 +522,33 @@ def create_iot_rule(rule_name, topic_filter, lambda_function_arn):
         
         # Wait for IAM permissions to propagate
         print("Waiting for IAM permissions to propagate...")
-        time.sleep(10)
+        time.sleep(60)  # Increase wait time to 60 seconds
         
+        # Test IoT Core access before creating rule
         try:
-            existing_rule = iot_client.get_topic_rule(ruleName=rule_name)
-            print(f"Existing IoT rule found: {rule_name}")
-            
-            # Update the rule
-            iot_client.replace_topic_rule(
+            print("Testing IoT Core access...")
+            iot_client.list_topic_rules()
+            print("✓ IoT Core access confirmed")
+        except Exception as e:
+            print(f"✗ IoT Core access test failed: {e}")
+            print("Please check IAM permissions for IoT Core")
+            return False
+        
+        # Try to delete existing rule first to avoid permission issues
+        try:
+            print(f"Attempting to delete existing rule: {rule_name}")
+            iot_client.delete_topic_rule(ruleName=rule_name)
+            print(f"✓ Existing rule deleted: {rule_name}")
+            time.sleep(5)  # Wait for deletion to complete
+        except iot_client.exceptions.ResourceNotFoundException:
+            print(f"No existing rule found: {rule_name}")
+        except Exception as e:
+            print(f"Could not delete existing rule: {e}")
+            # Continue anyway, might be a permission issue
+        
+        # Create new rule
+        try:
+            iot_client.create_topic_rule(
                 ruleName=rule_name,
                 topicRulePayload={
                     'sql': sql_statement,
@@ -506,9 +557,8 @@ def create_iot_rule(rule_name, topic_filter, lambda_function_arn):
                     'description': f'IoT rule to trigger Lambda for {topic_filter} topic'
                 }
             )
-            print(f"✓ IoT rule updated successfully: {rule_name}")
+            print(f"✓ New IoT rule created successfully: {rule_name}")
             return True
-            
         except Exception as e:
             print(f"IoT rule creation failed: {e}")
             return False
@@ -574,7 +624,7 @@ def main():
         # Extract function name from ARN for IoT setup
         lambda_function_name = lambda_function_arn.split(':')[-1]
         
-        # Setup IoT Core trigger for robo/feedback topic
+        # Setup IoT Core trigger 
         if setup_iot_lambda_trigger(lambda_function_name, lambda_function_arn):
             print("✓ IoT Core trigger setup completed successfully")
         else:
