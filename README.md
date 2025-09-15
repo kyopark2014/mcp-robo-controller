@@ -395,8 +395,8 @@ Robot 제어는 기본적으로 Agent에 의해 진행이되나, 직접 제어�
 ```python
 def test_robo_controller(lambda_function_name, action, message):
     payload = {
-        'action': 'HAPPY',
-        'message': 'Hello, I am happy'
+        'action': action,
+        'message': message
     }
     print(f"payload: {payload}")
 
@@ -412,6 +412,9 @@ def test_robo_controller(lambda_function_name, action, message):
     print(f"output: {output}")
 ```
 
+이때의 실행 결과는 아래와 같습니다.
+
+<img width="264" height="278" alt="image" src="https://github.com/user-attachments/assets/0a0f41e6-ebe6-403f-9cdb-153dd3afa57d" />
 
 
 
