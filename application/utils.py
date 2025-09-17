@@ -58,7 +58,62 @@ config = load_config()
 
 # config에서 필요한 변수들 추출
 bedrock_region = config.get('region', 'us-east-1')
-projectName = config.get('projectName', 'dae')
+projectName = config.get('projectName', 'mcp')
+
+# api key to get weather information in agent
+if aws_access_key and aws_secret_key:
+    secretsmanager = boto3.client(
+        service_name='secretsmanager',
+        region_name=bedrock_region,
+        aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key,
+        aws_session_token=aws_session_token,
+    )
+else:
+    secretsmanager = boto3.client(
+        service_name='secretsmanager',
+        region_name=bedrock_region
+    )
+
+# api key for weather
+weather_api_key = ""
+try:
+    get_weather_api_secret = secretsmanager.get_secret_value(
+        SecretId=f"openweathermap-{projectName}"
+    )
+    #logger.info('get_weather_api_secret: ', get_weather_api_secret)
+    secret = json.loads(get_weather_api_secret['SecretString'])
+    #logger.info('secret: ', secret)
+    weather_api_key = secret['weather_api_key']
+
+except Exception as e:
+    # raise e
+    pass
+
+# api key to use Tavily Search
+tavily_key = tavily_api_wrapper = ""
+try:
+    get_tavily_api_secret = secretsmanager.get_secret_value(
+        SecretId=f"tavilyapikey-{projectName}"
+    )
+    #logger.info('get_tavily_api_secret: ', get_tavily_api_secret)
+    secret = json.loads(get_tavily_api_secret['SecretString'])
+    #logger.info('secret: ', secret)
+
+    if "tavily_api_key" in secret:
+        tavily_key = secret['tavily_api_key']
+        #logger.info('tavily_api_key: ', tavily_api_key)
+
+        if tavily_key:
+            tavily_api_wrapper = TavilySearchAPIWrapper(tavily_api_key=tavily_key)
+            #     os.environ["TAVILY_API_KEY"] = tavily_key
+
+        else:
+            logger.info(f"tavily_key is required.")
+except Exception as e: 
+    logger.info(f"Tavily credential is required: {e}")
+    # raise e
+    pass
 
 def get_contents_type(file_name):
     if file_name.lower().endswith((".jpg", ".jpeg")):
