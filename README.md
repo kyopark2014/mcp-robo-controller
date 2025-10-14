@@ -4,7 +4,7 @@
 
 여기서는 Robot의 제어 명령어를 MCP를 이용합니다. 이를 구현하여 배포할 때에는 AgnetCore Gateway와 Lambda를 이용합니다. 
 
-<img width="800" alt="architecture" src="https://github.com/user-attachments/assets/2e1e2606-34fe-4654-b1e7-d1ab516bc613" />
+<img width="800" alt="architecture_robo" src="https://github.com/user-attachments/assets/a6b0fc32-e0fc-49c8-ae92-19fab2ceaa95" />
 
 
 ### MCP Interface Tool Spec
